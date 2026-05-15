@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agora AI Agent Console - Dual Channel</title>
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.22.0.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/agora-rtm-sdk@2.2.4/agora-rtm.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <style>
+        body { background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%); color: #ffffff; font-family: 'Segoe UI', sans-serif; margin: 20px; min-height: 100vh; }
+        .max-width-container { max-width: 1400px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 25px; font-weight: 800; text-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .container-row { display: flex; gap: 20px; margin-bottom: 20px; }
+        .panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); padding: 20px; border-radius: 15px; border: 1px solid rgba(255, 255, 255, 0.1); flex: 1; }
+        h3 { margin-top: 0; font-size: 18px; border-bottom: 2px solid rgba(102, 126, 234, 0.4); padding-bottom: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        label { display: block; margin-top: 10px; font-weight: 600; font-size: 13px; color: rgba(255, 255, 255, 0.7); }
+        input, select, textarea { width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; background: rgba(0, 0, 0, 0.3); color: #fff; border: 1px solid rgba(255, 255, 255, 0.1); box-sizing: border-box; }
+        input[type="checkbox"] { width: auto; margin-right: 8px; vertical-align: middle; transform: scale(1.2); }
+        textarea { height: 260px; font-family: monospace; font-size: 11px; }
+        .btn { background: linear-gradient(45deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 25px; color: white; padding: 10px 20px; font-weight: 600; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-success { background: linear-gradient(45deg, #28a745, #1e7e34); }
+        .btn-danger { background: linear-gradient(45deg, #dc3545, #bd2130); }
+        .btn-warning { background: linear-gradient(45deg, #fa8c16, #d46b08); }
+        .btn-purple { background: linear-gradient(45deg, #722ed1, #531dab); }
+        .btn-small { padding: 4px 10px; font-size: 12px; margin-top: 0; }
+        .rtm-section { width: 100%; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); border-radius: 15px; padding: 20px; border: 1px solid rgba(255, 255, 255, 0.1); box-sizing: border-box; margin-top: 20px; }
+        .rtm-messages { height: 450px; background: rgba(0, 0, 0, 0.3); border-radius: 12px; padding: 15px; margin-bottom: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 10px 15px; border-radius: 15px; max-width: 85%; font-size: 14px; line-height: 1.5; transition: 0.2s; }
+        .msg-ai { background: rgba(102, 126, 234, 0.2); align-self: flex-start; border-left: 4px solid #667eea; color: #d1d9ff; }
+        .msg-human { background: rgba(40, 167, 69, 0.2); align-self: flex-end; border-right: 4px solid #28a745; color: #d2f9d2; }
+        .msg-system { background: rgba(255, 255, 255, 0.1); align-self: center; font-size: 12px; border-radius: 5px; color: #ccc; text-align: center; }
+        .logs { background: rgba(0, 0, 0, 0.5); color: #95de64; padding: 15px; border-radius: 15px; height: 180px; overflow-y: auto; font-family: monospace; font-size: 12px; border: 1px solid rgba(255, 255, 255, 0.1); margin-top: 20px; }
+        .error-log { color: #ff4d4f; font-weight: bold; }
+        .state-log { color: #fadb14; font-weight: bold; }
+        .rtm-log { color: #00d2ff; font-weight: bold; }
+        .raw-log { color: #888; font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div class="max-width-container">
+        <h1>Agora AI Agent Voice & Text Console</h1>
+        
+        <div class="container-row">
+            <div class="panel">
+                <h3>1. Human Controller</h3>
+                <label>App ID</label><input type="text" id="appId" placeholder="App ID">
+                <label>Channel</label><input type="text" id="channel" value="agent_dennis_test_channel" oninput="syncChannel()">
+                
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1"><label>Human UID (String)</label><input type="text" id="humanUid" value="1111"></div>
+                    <div style="flex:1"><label>RTC Token</label><input type="text" id="humanToken" placeholder="Voice Token"></div>
+                    <div style="flex:1"><label>RTM Token</label><input type="text" id="rtmToken" placeholder="RTM Token (Optional)"></div>
+                </div>
+
+                <div style="margin-top: 15px; background: rgba(0,210,255,0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.3); transition: 0.3s;" id="rtmToggleContainer">
+                    <label style="margin: 0; color: #00d2ff; cursor: pointer;">
+                        <input type="checkbox" id="useRtm" onchange="toggleProtocol()"> 
+                        🚀 Switch to RTM Channel (Auto-syncs payload)
+                    </label>
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:15px;">
+                    <button class="btn" style="flex:1" id="btn-join" onclick="joinChannel()">Join Channel</button>
+                    <button class="btn btn-danger" style="flex:1" onclick="leaveChannel()">Leave Channel</button>
+                </div>
+                <button class="btn btn-purple" style="width:100%" onclick="leaveAll()">Close All (Leave, Stop Agent & Clear Msg)</button>
+                
+                <div class="remote-box" style="margin-top:20px; background:rgba(255,255,255,0.03); padding:10px; border-radius:10px;">
+                    <label style="margin-top:0">Remote Audio Status</label>
+                    <select id="remoteUserSelect"><option value="" disabled selected>Waiting for users...</option></select>
+                    <button class="btn" style="width:100%; font-size:12px; background:#faad14" onclick="subscribeAudio()">Manual Subscribe</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>2. Agent API Control</h3>
+                <div style="display:flex; gap:10px;"><input type="text" id="authUser" placeholder="Customer ID"><input type="password" id="authPass" placeholder="Secret"></div>
+                
+                <label>Agent Token</label>
+                <input type="text" id="agentToken" oninput="syncAgentToken()" placeholder="Syncs instantly to Payload below">
+                
+                <label>JSON Payload <span id="currentProtocol" style="color:#00d2ff; font-weight:normal; margin-left:10px">(Current: DataStream)</span></label>
+                <textarea id="payloadJson"></textarea>
+                <div id="agentBtnContainer"><button class="btn btn-success" style="width:100%" onclick="startAgent()">Start AI Agent</button></div>
+            </div>
+        </div>
+
+        <div class="rtm-section">
+            <h3>
+                <span>3. Channel Messages <span id="currentProtocolMsg" style="color:#00d2ff; font-weight:normal; font-size:14px; margin-left:10px">(Current: DataStream)</span></span>
+                <button class="btn btn-warning btn-small" onclick="clearMessages()">🗑️ Clear</button>
+            </h3>
+            <div id="rtm-messages" class="rtm-messages"><div id="wait-msg" class="msg msg-system">⚙️ System: Waiting to join channel...</div></div>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="rtm-message-input" placeholder="Type here and press Enter to send..." style="flex:1; border-radius:25px; background:rgba(255,255,255,0.05); color:white; padding:12px 20px; border:1px solid rgba(255,255,255,0.1);" onkeydown="if(event.key==='Enter' && !event.isComposing) { event.preventDefault(); smartSendMessage(); }">
+                <button class="btn" style="margin:0" id="sendBtn" onclick="smartSendMessage()">Send</button>
+            </div>
+        </div>
+
+        <div id="logArea" class="logs"></div>
+    </div>
+
+    <script>
+        const WORKER_PROXY_URL = "https://agora-convo-ai-middeware.kuanyowchen.workers.dev";
+        let rtc = { client: null, localAudioTrack: null, streamId: null, isJoined: false, remoteUsers: {} };
+        let rtmMgr = { client: null, isJoined: false };
+        let currentAgentId = null;
+        let lastTypedText = ""; 
+        let fragments = new Map(); 
+
+        const defaultPayload = { 
+            "name": "ConvAI_Dennis_Test", 
+            "properties": { 
+                "channel": "agent_dennis_test_channel", 
+                "token": "", 
+                "agent_rtc_uid": "0",  
+                "enable_string_uid": true,     
+                "idle_timeout": 120, 
+                "advanced_features": { 
+                    "enable_aivad": true, 
+                    "enable_bhvs": true, 
+                    "enable_tools": true, 
+                    "enable_rtm": false 
+                }, 
+                "parameters": { 
+                    "transcript": { "enable": true, "redundant": true, "protocol_version": "v2" }, 
+                    "data_channel": "datastream" 
+                }, 
+                "llm": { 
+                    "url": "https://workflow.amazingchat.ai/api/audio/chat", 
+                    "api_key": "moapi-sTKeSavNv0r5herybw625fJq", 
+                    "params": { 
+                        "model": "GPT-4o", 
+                        "agentId": "a2a284c3-6ed9-4bea-9cd7-078b015f179a", 
+                        "input_modalities": ["text", "audio"], 
+                        "output_modalities": ["text", "audio"] 
+                    } 
+                } 
+            } 
+        };
+        document.getElementById('payloadJson').value = JSON.stringify(defaultPayload, null, 2);
+
+        function log(msg, type = "info") { 
+            const logArea = document.getElementById('logArea');
+            let colorClass = '';
+            if (type === "error") colorClass = 'error-log';
+            if (type === "state") colorClass = 'state-log';
+            if (type === "rtm") colorClass = 'rtm-log';
+            if (type === "raw") colorClass = 'raw-log';
+            logArea.insertAdjacentHTML('afterbegin', `<div class="${colorClass}">[${new Date().toLocaleTimeString()}] ${msg}</div>`); 
+        }
+
+        // Token Validator using pako to decompress and check Service ID
+        function validateTokenForRTM(token) {
+            if (!token || !token.startsWith('007')) return false;
+            
+            try {
+                const base64Str = token.substring(3);
+                let cleanBase64 = base64Str.replace(/[^A-Za-z0-9+/=]/g, '');
+                while (cleanBase64.length % 4 !== 0) { cleanBase64 += '='; }
+
+                const binaryString = atob(cleanBase64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                const buffer = pako.inflate(bytes);
+                let pos = 0;
+                
+                function readUint16() {
+                    if (pos + 2 > buffer.length) throw new Error("EOF");
+                    const val = buffer[pos] | (buffer[pos + 1] << 8);
+                    pos += 2;
+                    return val;
+                }
+                
+                function skipString() {
+                    const len = readUint16();
+                    pos += len;
+                }
+
+                skipString(); // Signature
+                skipString(); // App ID
+                pos += 4; // issueTs
+                pos += 4; // expire
+                pos += 4; // salt
+                
+                const serviceCount = readUint16();
+                let hasRTM = false;
+                
+                for (let i = 0; i < serviceCount; i++) {
+                    const serviceType = readUint16();
+                    
+                    if (serviceType === 2) { // 2 is ServiceRtm ID
+                        hasRTM = true;
+                        break; 
+                    }
+                    
+                    const privilegeCount = readUint16();
+                    for (let j = 0; j < privilegeCount; j++) {
+                        pos += 2; 
+                        pos += 4; 
+                    }
+                    
+                    if (serviceType === 1) { 
+                        skipString(); 
+                        skipString(); 
+                    } else if (serviceType === 5) { 
+                        skipString(); 
+                    } else if (serviceType === 7) { 
+                        skipString(); 
+                        skipString(); 
+                        pos += 2;     
+                    }
+                }
+                return hasRTM;
+
+            } catch (e) {
+                console.error("[Token Validation] Parsing Error:", e);
+                return false;
+            }
+        }
+
+        function toggleProtocol() {
+            if (currentAgentId) {
+                alert("⚠️ Agent is currently running! Please stop the Agent before switching channel modes.");
+                const cb = document.getElementById('useRtm');
+                cb.checked = !cb.checked;
+                return;
+            }
+
+            const isRtm = document.getElementById('useRtm').checked;
+            const agentToken = document.getElementById('agentToken').value.trim();
+
+            if (isRtm && agentToken) {
+                if (!validateTokenForRTM(agentToken)) {
+                    alert("⚠️ Permission Check Failed:\n\nThe provided Agent Token does not contain RTM privileges (ServiceRtm)!\nPlease update your Token generator to include dual privileges.");
+                    document.getElementById('useRtm').checked = false; 
+                    return;
+                } else {
+                    log("✅ Token Validation Passed: RTM Privilege found.", "state");
+                }
+            }
+
+            try {
+                const j = JSON.parse(document.getElementById('payloadJson').value);
+                j.properties.advanced_features.enable_rtm = isRtm;
+                j.properties.parameters.data_channel = isRtm ? "rtm" : "datastream";
+                j.properties.parameters.transcript.redundant = !isRtm; 
+                document.getElementById('payloadJson').value = JSON.stringify(j, null, 2);
+                
+                const protocolText = `(Current: ${isRtm ? 'RTM' : 'DataStream'})`;
+                document.getElementById('currentProtocol').innerText = protocolText;
+                document.getElementById('currentProtocolMsg').innerText = protocolText;
+                
+                log(`🔄 Protocol switched to: ${isRtm ? 'RTM' : 'DataStream'}`, 'state');
+            } catch(e) {}
+        }
+
+        function syncChannel() { 
+            try { 
+                const j = JSON.parse(document.getElementById('payloadJson').value); 
+                j.properties.channel = document.getElementById('channel').value.trim(); 
+                document.getElementById('payloadJson').value = JSON.stringify(j, null, 2); 
+            } catch(e) {} 
+        }
+
+        function syncAgentToken() { 
+            try { 
+                const tokenVal = document.getElementById('agentToken').value.trim();
+                const isRtm = document.getElementById('useRtm').checked;
+
+                if (isRtm && tokenVal) {
+                    if (!validateTokenForRTM(tokenVal)) {
+                        log("⚠️ Warning: Provided Token lacks RTM privileges!", "error");
+                        alert("⚠️ Warning: The pasted Token does not contain RTM privileges (ServiceRtm). Agent will fail to use the RTM channel.");
+                    } else {
+                        log("✅ Token Validation Passed: RTM Privilege found.", "state");
+                    }
+                }
+
+                const j = JSON.parse(document.getElementById('payloadJson').value); 
+                j.properties.token = tokenVal; 
+                document.getElementById('payloadJson').value = JSON.stringify(j, null, 2); 
+            } catch(e) {} 
+        }
+
+        function clearMessages() {
+            const d = document.getElementById('rtm-messages');
+            d.innerHTML = '<div id="wait-msg" class="msg msg-system">⚙️ System: Messages cleared...</div>';
+            lastTypedText = ""; 
+            fragments.clear(); 
+            log("🗑️ Chat history cleared.", "state");
+        }
+
+        function base64ToUtf8(base64) { 
+            let cleanBase64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+            while (cleanBase64.length % 4 !== 0) { cleanBase64 += '='; }
+            const binary = atob(cleanBase64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+            return new TextDecoder().decode(bytes);
+        }
+
+        function upsertMessage(role, text, id) { 
+            if (!text) return; 
+            const d = document.getElementById('rtm-messages'); 
+            const wait = document.getElementById('wait-msg'); if (wait) wait.remove();
+            
+            const cleanId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
+            const bubbleId = `msg_${role}_${cleanId}`;
+            
+            let m = document.getElementById(bubbleId);
+            if (!m) {
+                m = document.createElement('div');
+                m.id = bubbleId;
+                m.className = `msg msg-${role}`;
+                d.appendChild(m);
+            }
+            m.innerHTML = `<strong>${role === 'ai' ? '🤖 AI' : '👤 You'}</strong>: ${text}`; 
+            d.scrollTop = d.scrollHeight; 
+        }
+
+        async function smartSendMessage() {
+            const input = document.getElementById('rtm-message-input');
+            const text = input.value.trim();
+            const isRtm = document.getElementById('useRtm').checked;
+            
+            if (!text) return;
+            if (!rtc.isJoined) return alert("⚠️ Please join the channel first!");
+            if (!currentAgentId && !isRtm) return alert("⚠️ Please start the AI Agent first!");
+            
+            input.value = ""; 
+            lastTypedText = text; 
+            
+            upsertMessage('human', text, `local_${Date.now()}`);
+
+            try {
+                                const appId = document.getElementById('appId').value.trim();
+                const user = document.getElementById('authUser').value.trim();
+                const pass = document.getElementById('authPass').value.trim();
+                const targetUrl = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${appId}/agents/${currentAgentId}/think`;
+                
+                log("sending msg via /think API...");
+                const res = await fetch(WORKER_PROXY_URL, { 
+                    method: 'POST', 
+                    headers: { "Content-Type": "application/json", "Authorization": `Basic ${btoa(user+':'+pass)}`, "X-Target-URL": targetUrl }, 
+                    body: JSON.stringify({ 
+                        "text": text, 
+                        "on_listening_action": "inject", 
+                        "on_thinking_action": "interrupt", 
+                        "on_speaking_action": "interrupt", 
+                        "interruptable": true 
+                    }) 
+                });
+                
+                if (!res.ok) { 
+                    const errData = await res.json();
+                    throw new Error(JSON.stringify(errData));
+                }
+            } catch (e) { 
+                log(`❌ Send Error: ${e.message}`, "error"); 
+                input.value = text; 
+            }
+        }
+
+        // 1. DataStream Parser
+        function handleTranscription(data) {
+            if (document.getElementById('useRtm').checked) return; 
+            
+            const rawStr = new TextDecoder().decode(data);
+            try {
+                const cleanStr = rawStr.replace(/\0/g, ''); 
+                const parts = cleanStr.split('|');
+                if (parts.length < 4) return;
+                
+                const id = parts[0];
+                const index = parseInt(parts[1]); 
+                const total = parseInt(parts[2]); 
+                const payload = parts.slice(3).join('|');
+
+                if (!fragments.has(id)) fragments.set(id, new Array(total).fill(null));
+                const chunks = fragments.get(id);
+                chunks[index - 1] = payload;
+
+                if (chunks.every(c => c !== null)) {
+                    const fullBase64 = chunks.join('');
+                    fragments.delete(id);
+                    
+                    try {
+                        const jsonStr = base64ToUtf8(fullBase64);
+                        const json = JSON.parse(jsonStr);
+                        
+                        if (json.object === "message.state" || json.object === "agent.state") return; 
+
+                        const role = (json.object && json.object.includes("user")) ? "human" : "ai";
+                        let textToDisplay = json.text !== undefined ? json.text : (json.content !== undefined ? json.content : null);
+
+                        if (role === 'human' && textToDisplay === lastTypedText) return;
+
+                        if (textToDisplay !== null && textToDisplay !== "") {
+                            upsertMessage(role, textToDisplay, json.turn_id || id);
+                        }
+                    } catch(parseErr) {}
+                }
+            } catch(e) {}
+        }
+
+        // 2. RTM Parser
+        function handleRtmMessage(event) {
+            if (!document.getElementById('useRtm').checked) return; 
+
+            try {
+                const currentHumanUid = String(document.getElementById('humanUid').value.trim());
+                if (event.publisher === currentHumanUid) return; 
+
+                let payload = event.message;
+                if (payload instanceof Uint8Array) {
+                    payload = new TextDecoder().decode(payload);
+                }
+
+                let json;
+                try {
+                    json = JSON.parse(payload);
+                } catch {
+                    json = { text: payload };
+                }
+
+                if (json.object === "message.state" || json.object === "agent.state" || json.event_type) {
+                    return;
+                }
+
+                let text = null;
+                if (typeof json.text === "string") text = json.text;
+                else if (typeof json.content === "string") text = json.content;
+                else if (typeof json.data?.text === "string") text = json.data.text;
+                else if (typeof json.message?.text === "string") text = json.message.text;
+                else if (json.data?.message && typeof json.data.message.text === "string") text = json.data.message.text;
+
+                if (!text) return; 
+
+                let role = "ai";
+                if (json.object && json.object.includes("user") || json.role === "user") {
+                    role = "human";
+                }
+
+                if (role === 'human' && text === lastTypedText) return;
+
+                const uniqueId = json.turn_id || json.message_id || `rtm_${Date.now()}`;
+                upsertMessage(role, text, uniqueId);
+
+            } catch (err) {
+                console.error("RTM Parsing Error:", err);
+            }
+        }
+
+        async function joinChannel() {
+            const appId = document.getElementById('appId').value.trim();
+            const ch = document.getElementById('channel').value.trim();
+            const tk = document.getElementById('humanToken').value.trim();
+            const rtmTk = document.getElementById('rtmToken').value.trim();
+            
+            const uidString = String(document.getElementById('humanUid').value.trim());
+            const isRtm = document.getElementById('useRtm').checked;
+            
+            if (!appId) return alert("Please enter an App ID");
+            if (!uidString) return alert("Please enter a Human UID");
+            
+            try {
+                if (!rtc.client) {
+                    rtc.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+                    rtc.client.on("user-joined", (u) => { rtc.remoteUsers[u.uid] = u; updateRemoteDropdown(); });
+                    rtc.client.on("user-published", async (u, t) => { 
+                        rtc.remoteUsers[u.uid] = u; updateRemoteDropdown(); 
+                        if (t === "audio") log(`📡 Remote user (${u.uid}) published audio 👆`); 
+                    });
+                    rtc.client.on("user-left", (u) => { delete rtc.remoteUsers[u.uid]; updateRemoteDropdown(); });
+                    
+                    rtc.client.on("stream-message", (uid, data) => handleTranscription(data));
+                }
+                log("⏳ Joining RTC channel...");
+                
+                await rtc.client.join(appId, ch, tk || null, uidString);
+                
+                try {
+                    if (typeof rtc.client.createDataStream === 'function') {
+                        rtc.streamId = await rtc.client.createDataStream({ reliable: true, ordered: true });
+                    } else {
+                        rtc.streamId = -1; 
+                    }
+                } catch(e) { rtc.streamId = -1; }
+
+                rtc.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                await rtc.client.publish([rtc.localAudioTrack]);
+                rtc.isJoined = true;
+                log(`✅ RTC Connected (UID: ${uidString})`);
+
+                const btnJoin = document.getElementById('btn-join');
+                if (btnJoin) {
+                    btnJoin.disabled = true;
+                    btnJoin.innerText = "Joined";
+                }
+
+                if (isRtm) {
+                    log("⏳ Initializing RTM channel...", "rtm");
+                    if (!rtmMgr.client) {
+                        rtmMgr.client = new AgoraRTM.RTM(appId, uidString);
+                        rtmMgr.client.addEventListener("message", handleRtmMessage);
+                    }
+                    try {
+                        await rtmMgr.client.login({ token: rtmTk || tk || undefined });
+                        await rtmMgr.client.subscribe(ch, { withPresence: false });
+                        
+                        rtmMgr.isJoined = true;
+                        log(`🚀 RTM Connected! (UID: ${uidString})`, "rtm");
+                    } catch (rtmErr) {
+                        log(`❌ RTM Join Failed: ${rtmErr.message}`, "error");
+                        alert(`RTM Join Failed: ${rtmErr.message}`);
+                    }
+                }
+            } catch (e) { log("❌ Join Failed: " + e.message, "error"); }
+        }
+
+        async function startAgent() {
+            const appId = document.getElementById('appId').value.trim(), user = document.getElementById('authUser').value.trim(), pass = document.getElementById('authPass').value.trim();
+            const targetUrl = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${appId}/join`;
+            try {
+                log("⏳ Starting Agent...");
+                const res = await fetch(WORKER_PROXY_URL, { method: 'POST', headers: { "Content-Type": "application/json", "Authorization": `Basic ${btoa(user+':'+pass)}`, "X-Target-URL": targetUrl }, body: document.getElementById('payloadJson').value });
+                const data = await res.json();
+                if (data.agent_id) { 
+                    currentAgentId = data.agent_id; 
+                    log(`✅ Agent Started (${currentAgentId})`); 
+                    updateAgentButton(true); 
+                }
+                else { log(`🚨 Start Failed: ${JSON.stringify(data)}`, "error"); }
+            } catch (e) { log(`🚨 API Error: ${e.message}`, "error"); }
+        }
+
+        async function stopAgent() {
+            if (!currentAgentId) return;
+            const appId = document.getElementById('appId').value.trim(), user = document.getElementById('authUser').value.trim(), pass = document.getElementById('authPass').value.trim();
+            const targetUrl = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${appId}/agents/${currentAgentId}/leave`;
+            try {
+                await fetch(WORKER_PROXY_URL, { method: 'POST', headers: { "Content-Type": "application/json", "Authorization": `Basic ${btoa(user+':'+pass)}`, "X-Target-URL": targetUrl }, body: JSON.stringify({}) });
+                currentAgentId = null; 
+                log(`✅ Agent Stopped`); 
+                updateAgentButton(false);
+            } catch (e) { log(`🚨 Stop Failed: ${e.message}`, "error"); }
+        }
+
+        function updateAgentButton(run) { 
+            document.getElementById('agentBtnContainer').innerHTML = run 
+                ? `<button class="btn btn-danger" style="width:100%" onclick="stopAgent()">Stop Agent</button>` 
+                : `<button class="btn btn-success" style="width:100%" onclick="startAgent()">Start AI Agent</button>`; 
+                
+            const rtmCheckbox = document.getElementById('useRtm');
+            const rtmContainer = document.getElementById('rtmToggleContainer');
+            if (rtmCheckbox && rtmContainer) {
+                rtmCheckbox.disabled = run;
+                rtmContainer.style.opacity = run ? "0.5" : "1";
+                rtmContainer.style.cursor = run ? "not-allowed" : "pointer";
+                rtmContainer.title = run ? "Cannot switch channels while Agent is running" : "";
+            }
+        }
+
+        function leaveChannel() { 
+            if (rtc.localAudioTrack) { rtc.localAudioTrack.stop(); rtc.localAudioTrack.close(); } 
+            if (rtc.client) { rtc.client.leave(); }
+            if (rtmMgr.isJoined && rtmMgr.client) { 
+                rtmMgr.client.unsubscribe(document.getElementById('channel').value.trim());
+                rtmMgr.client.logout(); 
+                rtmMgr.isJoined = false; 
+                log("🚪 Left RTM Channel", "rtm"); 
+            }
+            rtc.isJoined = false; 
+            rtc.remoteUsers = {}; 
+            updateRemoteDropdown(); 
+            log("🚪 Left RTC Channel"); 
+            
+            const btnJoin = document.getElementById('btn-join');
+            if (btnJoin) {
+                btnJoin.disabled = false;
+                btnJoin.innerText = "Join Channel";
+            }
+        }
+        
+        async function leaveAll() { 
+            leaveChannel(); 
+            if (currentAgentId) await stopAgent(); 
+            clearMessages();
+        }
+
+        function updateRemoteDropdown() { 
+            const s = document.getElementById('remoteUserSelect'); 
+            s.innerHTML = '<option value="" disabled selected>Select user...</option>'; 
+            Object.values(rtc.remoteUsers).forEach(u => { s.insertAdjacentHTML('beforeend', `<option value="${u.uid}">UID: ${u.uid} ${u.hasAudio ? '(Audio)' : '(Listening)'}</option>`); }); 
+        }
+        
+        function subscribeAudio() { 
+            const uid = document.getElementById('remoteUserSelect').value; 
+            const u = rtc.remoteUsers[uid]; 
+            if (u && u.hasAudio) { rtc.client.subscribe(u, "audio").then(() => { u.audioTrack.play(); log(`🔊 Subscribed to: ${uid}`); }); }
+            else { log("⚠️ User has not published audio yet."); }
+        }
+    </script>
+</body>
+</html>
